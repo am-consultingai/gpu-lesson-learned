@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Two Projects, One Platform · AM Consulting</title>
+<meta name="description" content="How AM Consulting fine-tuned an embedding model for support deflection and a small LLM for conversational search on AWS, and the GPU, SageMaker, Bedrock and serving lessons from both.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/am-consultingai/am-assets@v2/brand.css">
+<link rel="icon" href="https://cdn.jsdelivr.net/gh/am-consultingai/am-assets@v2/logo/am-favicon.png">
+<style>
+/* Page layer on top of brand.css: each project is a phase timeline (phase label left, story right); project hue marks which project you are in. */
+:root {
+  color-scheme: dark;
+  --surface: var(--card);
+  --muted: var(--s3);
+  --p1: var(--cyan);
+  --p1-soft: rgba(34, 211, 238, 0.07);
+  --p2: var(--indigo);
+  --p2-soft: rgba(129, 140, 248, 0.09);
+  --font-display: var(--display);
+  --font-body: var(--sans);
+  --font-mono: var(--mono);
+  --nav-h: 70px;
+}
+section[id] { scroll-margin-top: calc(var(--nav-h) + 20px); }
+
+/* sticky nav: brand .nav, plus active state and a scrollable second row on narrow screens */
+.nav-links a.on { color: var(--ink); border-bottom-color: var(--cyan); }
+@media (max-width: 1000px) {
+  :root { --nav-h: 112px; }
+  .nav-in { flex-wrap: wrap; row-gap: 4px; padding-block: 10px 0; min-height: 0; }
+  .nav-links {
+    display: flex; order: 3; width: 100%; margin-left: 0; gap: 20px;
+    overflow-x: auto; white-space: nowrap; scrollbar-width: none; padding-bottom: 6px;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links a { flex: none; }
+}
+.foot-in { display: grid; gap: 12px; justify-items: center; }
+.foot-in img { height: 30px; width: auto; }
+.foot-in a { text-decoration: none; }
+.foot-in a:hover { color: var(--cyan); }
+
+.wrap {
+  max-width: var(--maxw); margin: 0 auto;
+  padding-left: max(var(--pad), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--pad), env(safe-area-inset-right, 0px));
+  padding-block: 56px 88px;
+  display: grid; gap: 72px;
+}
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.12; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(2.3rem, 6vw, 3.6rem); letter-spacing: -0.02em; }
+h2 { font-size: clamp(1.7rem, 4vw, 2.3rem); margin-top: 0; max-width: none; }
+h3 { font-size: 1.25rem; }
+p { margin: 0; }
+.prose { max-width: 68ch; }
+section { display: grid; gap: 24px; min-width: 0; }
+
+header { display: grid; gap: 18px; }
+.lede { font-size: 1.2rem; color: var(--s2); max-width: 60ch; }
+
+.challenges { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+.challenge { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.challenge .kind { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.challenge.one .kind { color: var(--p1); }
+.challenge.two .kind { color: var(--p2); }
+.challenge .goal { font-size: 0.95rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+
+.project-head { display: grid; gap: 10px; padding-top: 20px; border-top: 3px solid var(--hue); }
+.project-head .eyebrow { color: var(--hue); }
+.project-head .eyebrow::before { background: var(--hue); }
+.p1 { --hue: var(--p1); --hue-soft: var(--p1-soft); }
+.p2 { --hue: var(--p2); --hue-soft: var(--p2-soft); }
+
+.timeline { display: grid; gap: 0; }
+.phase {
+  display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 24px;
+  padding-block: 28px; border-bottom: 1px solid var(--line);
+}
+.phase:last-child { border-bottom: 0; }
+@media (max-width: 680px) { .phase { grid-template-columns: minmax(0, 1fr); gap: 10px; } }
+.phase-label { display: grid; gap: 4px; align-content: start; }
+.phase-label .num { font-family: var(--font-mono); font-size: 0.78rem; color: var(--hue); letter-spacing: 0.05em; }
+.phase-label .name { font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; line-height: 1.2; }
+.phase-label .dur { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+.phase-body { display: grid; gap: 14px; min-width: 0; }
+.phase-body > p { max-width: 66ch; }
+.lesson {
+  background: var(--hue-soft); border-radius: 8px; padding: 14px 18px; display: grid; gap: 4px; max-width: 70ch;
+}
+.lesson .lt { font-weight: 600; }
+.lesson .lt::before {
+  content: "Lesson"; display: block; font-family: var(--font-mono); font-size: 0.7rem; font-weight: 500;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--hue); margin-bottom: 2px;
+}
+.lesson p { color: var(--s2); }
+ol.split { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; max-width: 64ch; }
+
+.takeaways { display: grid; gap: 0; counter-reset: t; }
+.takeaway {
+  counter-increment: t; display: grid; grid-template-columns: 3rem minmax(0, 1fr); gap: 4px 14px;
+  padding-block: 18px; border-bottom: 1px solid var(--line);
+}
+.takeaway:last-child { border-bottom: 0; }
+.takeaway::before { content: counter(t); font-family: var(--font-display); font-size: 1.9rem; line-height: 1; color: var(--muted); }
+.takeaway div { display: grid; gap: 4px; min-width: 0; }
+.takeaway b { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; }
+
+.tech { --hue: var(--ink); }
+.groups { display: grid; gap: 44px; }
+.group { display: grid; gap: 6px; min-width: 0; }
+.group > h3 { padding-bottom: 6px; }
+.group > .scope { color: var(--muted); font-size: 0.95rem; max-width: 68ch; margin-bottom: 4px; }
+.items { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 36px; }
+.ti { display: grid; gap: 6px; padding-block: 14px; border-top: 1px solid var(--line); align-content: start; min-width: 0; }
+.ti b { font-weight: 600; }
+.ti p { font-size: 0.96rem; }
+.ti .fix { color: var(--muted); }
+.ti .fix span {
+  font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--p1); margin-right: 6px;
+}
+.ti code, .stack code { font-family: var(--font-mono); font-size: 0.85em; background: var(--bg); padding: 0 4px; border-radius: 3px; word-break: break-word; }
+.stack-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.stack { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 0.93rem; }
+.stack th, .stack td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.stack tr:last-child td { border-bottom: 0; }
+.stack th { font-family: var(--font-mono); font-weight: 500; font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+.stack td:first-child { font-weight: 600; white-space: nowrap; }
+</style>
+</head>
+<body>
+<nav class="nav" aria-label="Page sections">
+  <div class="nav-in">
+    <a href="https://www.amconsultingai.com" aria-label="AM Consulting home">
+      <img class="nav-logo" src="https://cdn.jsdelivr.net/gh/am-consultingai/am-assets@v2/logo/am-logo-white-600.png" alt="AM Consulting" width="126" height="34">
+    </a>
+    <div class="nav-links">
+      <a href="#challenge">Challenge</a>
+      <a href="#deflection">Support deflection</a>
+      <a href="#search">Conversational search</a>
+      <a href="#technical">Technical lessons</a>
+      <a href="#takeaways">Takeaways</a>
+    </div>
+    <a class="btn btn-pri btn-sm" href="mailto:office@amconsultingai.com">Talk to us</a>
+  </div>
+</nav>
+
+<main class="wrap">
+  <header>
+    <span class="eyebrow">AM Consulting · case study · travel booking · AWS</span>
+    <h1>Two Projects, <span class="grad">One Platform</span></h1>
+    <p class="lede">How we fine-tuned an embedding model to deflect support tickets and a small LLM to power conversational search for a large online travel booking platform, and what each phase taught us.</p>
+  </header>
+
+  <section id="challenge">
+    <span class="eyebrow">The business challenge</span>
+    <h2>Two problems landed in the same quarter</h2>
+    <p class="prose">The client is a large online travel booking platform (name withheld) offering hotels, vacation rentals and activities. It lists hundreds of thousands of properties and serves millions of travelers a month. It runs entirely on AWS and has a small in-house ML team.</p>
+    <div class="challenges">
+      <div class="challenge one">
+        <span class="kind">Project 1 · fine-tuned embedding model</span>
+        <h3>Support costs rose every holiday season</h3>
+        <p>About 40,000 tickets a month, with sharp peaks before holidays. Roughly a third asked questions the help center already answered: changing dates, cancellation policies, refund status, a missing confirmation email. Travelers never found those answers because help search was keyword-based.</p>
+        <p class="goal">Goal: show the 3 most useful articles or past resolutions before a ticket is opened. Deflect 20% of tickets.</p>
+      </div>
+      <div class="challenge two">
+        <span class="kind">Project 2 · fine-tuned small LLM</span>
+        <h3>Search failed on how travelers actually ask</h3>
+        <p>Queries like "quiet beach hotel in Crete for a family of four in late June, under €200 a night" or "romantic weekend in Lisbon with a view" got poor results. Nearly one in five free-text searches ended without a click, mostly on mobile.</p>
+        <p class="goal">Goal: a trip-planning assistant inside search that turns conversation into a structured search. +5% relative booking conversion on assistant sessions.</p>
+      </div>
+    </div>
+    <p class="prose">We deliberately started with the lower-risk embedding project, so it would build the shared platform (data pipelines, experiment tracking, model registry, evaluation practice) that the LLM project would later reuse.</p>
+  </section>
+
+  <section class="p1" id="deflection">
+    <div class="project-head">
+      <span class="eyebrow">Project 1</span>
+      <h2>Support deflection</h2>
+      <p class="prose" style="color:var(--muted)">Fine-tuned embedding model (~570M parameters), plus a distilled reranker, served from an OpenSearch vector index.</p>
+    </div>
+    <div class="timeline">
+      <div class="phase">
+        <div class="phase-label"><span class="num">Phase 0</span><span class="name">Discovery &amp; data audit</span><span class="dur">3 weeks</span></div>
+        <div class="phase-body">
+          <p>We pulled two years of resolved tickets and linked each one to the article or macro that closed it. We sampled 500 pairs and read them by hand.</p>
+          <div class="lesson"><span class="lt">Roughly a third of the ticket labels were unusable.</span>
+            <p>Agents closed tickets with generic macros ("Thanks, closing this") or workflow notes that solved nothing. Training on all of them would have taught the model to retrieve generic closing messages. We filtered and kept about 70% of the pairs.</p></div>
+          <div class="lesson"><span class="lt">PII masking can break the data in its own way.</span>
+            <p>Travel tickets are full of personal data: names, passport numbers, phone numbers, booking references, card details. Our first masking dictionary was far too aggressive and blanked out thousands of passages, including hotel and city names that looked like surnames. We added a frequency cap: a "name" that shows up in more than a few percent of tickets is treated as ordinary text.</p></div>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-label"><span class="num">Phase 1</span><span class="name">Baseline</span><span class="dur">3 weeks</span></div>
+        <div class="phase-body">
+          <p>Before training anything, we built a fixed evaluation set: 1,000 held-out real tickets with known correct answers. We tested four off-the-shelf embedding models, BM25, a hybrid of both, and an off-the-shelf reranker.</p>
+          <div class="lesson"><span class="lt">The newest model wasn't the best, and simple fixes captured part of the gain.</span>
+            <p>A mid-sized multilingual model beat newer, higher-ranked models on our data, which mattered because travelers write in many languages. BM25 alone beat pure embeddings on short tickets and was essential for booking references and payment error codes. The hybrid helped. The off-the-shelf reranker made results slightly worse. Since then we choose models on our own eval set and use public benchmark rankings only to build the shortlist.</p></div>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-label"><span class="num">Phase 2</span><span class="name">Fine-tuning</span><span class="dur">4 weeks</span></div>
+        <div class="phase-body">
+          <p>We fine-tuned the embedding model on about 6,000 cleaned ticket→resolution pairs with mined hard negatives. One epoch on a single L40S GPU took about three hours.</p>
+          <div class="lesson"><span class="lt">Fine-tuning made part of the system worse, and only per-type evaluation caught it.</span>
+            <p>Ticket recall@10 rose by about 18 points, but help-article retrieval fell below the base model. The model had learned the language of tickets and forgotten the language of policy documentation. Generating synthetic questions for every article and mixing them in fixed both.</p></div>
+          <div class="lesson"><span class="lt">More training hurt.</span>
+            <p>A second epoch and larger batches gave no gain or a small drop. We kept runs short and watched validation loss.</p></div>
+          <div class="lesson"><span class="lt">The reranker was the better investment.</span>
+            <p>We distilled a small reranker from an LLM's relevance scores using only about 500 query groups. Top-1 accuracy rose sharply, with no reindexing. It was especially good at telling apart look-alike policies, such as a free cancellation versus a non-refundable rate. If we did it again, we would start here.</p></div>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-label"><span class="num">Phase 3</span><span class="name">Pilot</span><span class="dur">6 weeks</span></div>
+        <div class="phase-body">
+          <p>We ran an A/B test with suggestions shown on 20% of ticket forms.</p>
+          <div class="lesson"><span class="lt">Deflection needs a guardrail metric.</span>
+            <p>Early results looked great until we checked how often travelers came back within 48 hours with the same problem. Some apparent deflections were travelers giving up. We made a reopen rate below a set threshold a release condition. Net deflection settled around 17%: below the 20% target, but well above break-even. The suggestions also cut handling time on tickets that did go through, which we had not planned for.</p></div>
+          <div class="lesson"><span class="lt">Some tickets should never be deflected.</span>
+            <p>A traveler standing at a hotel desk with no reservation doesn't need an article. We added an urgency check (check-in today, "at the hotel now", overbooking) that skips suggestions and routes straight to an agent.</p></div>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-label"><span class="num">Phase 4</span><span class="name">Production</span><span class="dur">ongoing</span></div>
+        <div class="phase-body">
+          <p>We set up monthly retraining from "this solved it" clicks, with an extra retrain before each peak season when policies change.</p>
+          <div class="lesson"><span class="lt">Every new model version means a full reindex.</span>
+            <p>OpenSearch can't change a vector field in place, so each version gets its own index, filled in the background, checked against the evaluation set and switched in through an alias. We keep the old index for a week as a rollback. We should have designed this in Phase 0. We built it in a rush before the first retrain.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="p2" id="search">
+    <div class="project-head">
+      <span class="eyebrow">Project 2</span>
+      <h2>Conversational search</h2>
+      <p class="prose" style="color:var(--muted)">Fine-tuned 4B LLM (LoRA) that turns a trip-planning conversation into a structured search call, served with vLLM on a SageMaker endpoint.</p>
+    </div>
+    <div class="timeline">
+      <div class="phase">
+        <div class="phase-label"><span class="num">Phase 0</span><span class="name">Discovery &amp; narrowing the problem</span><span class="dur">3 weeks</span></div>
+        <div class="phase-body">
+          <p>The first request was "a travel agent chatbot." We split it into three parts:</p>
+          <ol class="split">
+            <li>Conversation → structured search call (JSON): destination, dates, guests, budget, amenities, location. This is the core, and where we would fine-tune.</li>
+            <li>Running the search against live availability, which the existing engine already did well.</li>
+            <li>Writing a short reply, done with templates or a frontier model.</li>
+          </ol>
+          <div class="lesson"><span class="lt">Shrinking the LLM's job was the most important decision of the project.</span>
+            <p>In travel, prices and availability change by the minute. The fine-tuned model never states a price or says a room is available. It only produces search calls, and the live engine supplies every fact, so it cannot invent rooms or rates.</p></div>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-label"><span class="num">Phase 1</span><span class="name">Baseline</span><span class="dur">4 weeks</span></div>
+        <div class="phase-body">
+          <p>We prompted a frontier model on Bedrock with the full search schema (destinations, amenity codes, property types) in the prompt and measured it on 1,500 labeled conversations.</p>
+          <div class="lesson"><span class="lt">The baseline was good but slow and expensive at our volume.</span>
+            <p>A 2,000+ token schema in every request cost seconds of latency. Quality was strong on popular destinations and weak on our own amenity codes, property types and regional place names.</p></div>
+          <div class="lesson"><span class="lt">Our LLM judges disagreed with each other more than our systems differed.</span>
+            <p>Two frontier models rated the same conversations very differently. We had experts label a sample, measured agreement, and rewrote the rubric until the judge matched them. Before calibration, the judge scores correlated poorly with expert ratings.</p></div>
+          <div class="lesson"><span class="lt">The frontier model almost never asked a clarifying question.</span>
+            <p>Given "somewhere warm in March," it picked a destination instead of asking about budget or flight time. Prompting couldn't fix this.</p></div>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-label"><span class="num">Phase 2</span><span class="name">Data &amp; fine-tuning</span><span class="dur">6 weeks</span></div>
+        <div class="phase-body">
+          <p>We built about 12,000 training examples: roughly half from real search logs (query → filters the traveler ended up applying → property they viewed or booked), half synthetic from the search schema. We first tried an 8B model, then a 4B model, using LoRA at rank 32.</p>
+          <div class="lesson"><span class="lt">Synthetic conversations didn't sound like travelers.</span>
+            <p>When one model wrote both sides, the "travelers" wrote long, polite paragraphs. Real users type six words and change their dates halfway through. We switched to a two-agent simulation with personas ("impatient", "budget-focused", "undecided about dates") and checked it against real logs.</p></div>
+          <div class="lesson"><span class="lt">Clarifying questions were over-represented in the training data.</span>
+            <p>Our first version asked a clarifying question on almost every turn, because the training data had many clarification examples and few cases where it should just search. Balancing the two labels, and adding "don't apply a filter" examples, fixed it.</p></div>
+          <div class="lesson"><span class="lt">Format mismatches between training and serving quietly reduced quality.</span>
+            <p>Small differences in tool names, field order, date formats and prompt wording between training data and the production prompt cost us several points. We made a single source of truth for the prompt and schema.</p></div>
+          <div class="lesson"><span class="lt">The 4B model was enough.</span>
+            <p>After fine-tuning, the 4B model matched the 8B model on structured-call accuracy, with about 99% valid JSON, and beat the frontier baseline on our own amenity codes and place names at about half the 8B serving cost. The frontier model stayed better on multi-stop trips ("3 nights in Rome, then 2 in Florence, with a car"), so we route those to it.</p></div>
+          <div class="lesson"><span class="lt">Train on three seeds.</span>
+            <p>One run looked excellent, and two reruns with different random seeds came out noticeably worse. We now report the average and the spread.</p></div>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-label"><span class="num">Phase 3</span><span class="name">Pilot</span><span class="dur">8 weeks</span></div>
+        <div class="phase-body">
+          <p>We ran the model in shadow mode for two weeks, then served it to 1% of mobile search, then 5%.</p>
+          <div class="lesson"><span class="lt">Equal offline scores, lower online conversion.</span>
+            <p>At 1% traffic, the fine-tuned model converted worse than the prompted baseline even though offline scores were equal. Tagging every failure showed two slices causing most of the gap: flexible dates ("a long weekend in May") and landmark or neighborhood queries ("walking distance to the old town"). Targeted training data closed it within two retraining cycles.</p></div>
+          <div class="lesson"><span class="lt">Slow replies lowered conversion.</span>
+            <p>Slow replies reduced conversion regardless of answer quality. We cached results for frequent queries so only the long tail reaches the model, added a 1-second timeout that falls back to plain keyword search, and kept at least one warm replica at all times. A cold start took several minutes.</p></div>
+          <div class="lesson"><span class="lt">We had to benchmark our own GPUs.</span>
+            <p>No public data existed for our model on our instance type under real concurrency. A one-day load test, run at peak-season traffic levels, showed how many concurrent sessions each instance could handle before latency degraded.</p></div>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-label"><span class="num">Phase 4</span><span class="name">Production</span><span class="dur">ongoing</span></div>
+        <div class="phase-body">
+          <p>The model is served with vLLM on a SageMaker endpoint and retrained every two weeks with new failure slices and seasonal queries.</p>
+          <div class="lesson"><span class="lt">Pin your versions.</span>
+            <p>A routine vLLM upgrade changed throughput noticeably, and a SageMaker SDK update broke a pipeline step. Both versions are now pinned and upgraded only after a load test.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tech" id="technical">
+    <span class="eyebrow">Under the hood</span>
+    <h2>Hard technical lessons</h2>
+    <p class="prose">The phase stories above cover what we learned about the work itself. This section covers the platform: AWS capacity, SageMaker, Bedrock, model serving, the interfaces between components, and the models themselves. Each item is what broke and what we did about it.</p>
+
+    <div class="stack-wrap">
+      <table class="stack">
+        <thead><tr><th>Layer</th><th>What we ended up with</th><th>What we tried and dropped</th></tr></thead>
+        <tbody>
+          <tr><td>Embedding training</td><td>SageMaker Training Jobs on 1× g6e.xlarge (L40S 48GB), sentence-transformers</td><td>Larger multi-GPU instances: no quality gain</td></tr>
+          <tr><td>LLM training</td><td>SageMaker Training Jobs on g6e.12xlarge (4× L40S), LoRA r32, Spot with S3 checkpoints</td><td>p5 Capacity Blocks: not needed at 4–8B</td></tr>
+          <tr><td>Experiment tracking</td><td>SageMaker managed MLflow plus Model Registry</td><td>Notebook-only tracking in the first weeks</td></tr>
+          <tr><td>Vector search</td><td>OpenSearch, one index per model version, alias swap, BM25 in the same index</td><td>Separate keyword and vector clusters</td></tr>
+          <tr><td>LLM serving</td><td>vLLM on a SageMaker real-time endpoint, g6e, adapter merged, minimum 1 instance</td><td>Bedrock Custom Model Import for the live path; an EKS prototype</td></tr>
+          <tr><td>Frontier model</td><td>Bedrock Converse API: baseline, synthetic data, judge, fallback for multi-stop trips</td><td>Using the same model family as both teacher and judge</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="groups">
+      <div class="group">
+        <h3>AWS capacity and quotas</h3>
+        <div class="items">
+          <div class="ti"><b>Approved quota did not guarantee capacity.</b><p>With approved quota, g6e launches still failed with <code>InsufficientInstanceCapacity</code> in our main region during a busy week.</p><p class="fix"><span>Fix</span>Launch logic that tries every availability zone, then a fallback instance type (g6e, then g6/g5 for embedding jobs), with a retry window of about 30 minutes.</p></div>
+          <div class="ti"><b>Every quota is separate.</b><p>EC2 on-demand, Spot, SageMaker training, SageMaker endpoints and HyperPod each have their own quota per instance type. New accounts start at zero for GPU families.</p><p class="fix"><span>Fix</span>We filed every quota request in Phase 0. P-family requests took the longest.</p></div>
+          <div class="ti"><b>"Limit 0" on deploy with quota showing available.</b><p>We had raised the training quota for an instance type, but the endpoint quota for the same <code>ml.*</code> type is a different line item.</p><p class="fix"><span>Fix</span>Check the specific endpoint usage quota before the first deployment, not on launch day.</p></div>
+          <div class="ti"><b>Capacity Blocks gave little discount.</b><p>Blocks are an EC2 feature; SageMaker has its own training plans. After the 2026 price increases, a p5 block was only about 13% cheaper than on-demand.</p><p class="fix"><span>Fix</span>We skipped them. Our 4–8B LoRA runs fit on g6e, which we could get on demand or as Spot.</p></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>SageMaker training and tooling</h3>
+        <div class="items">
+          <div class="ti"><b>Startup time dominated short jobs.</b><p>Each training job pulls a multi-GB container. For a 40-minute embedding run, provisioning and image pull were a large share of the wall clock.</p><p class="fix"><span>Fix</span>Warm pools during hyperparameter sweeps (keep-alive is capped at 1 hour), and fewer, longer sweep jobs.</p></div>
+          <div class="ti"><b>Long runs hit the default time limit.</b><p>Training jobs default to a 1-day maximum runtime, and Spot interruptions restart from scratch unless you checkpoint.</p><p class="fix"><span>Fix</span>Checkpoint to S3 every N steps and resume automatically. This made Spot safe for LoRA runs.</p></div>
+          <div class="ti"><b>An SDK upgrade broke the pipeline.</b><p>Moving to SageMaker Python SDK v3 produced an empty input config that the pipeline API rejected, and step caching stopped hitting when we used <code>source_dir</code>.</p><p class="fix"><span>Fix</span>Pin the SDK version in the lockfile and upgrade only in a dedicated change with a full pipeline run.</p></div>
+          <div class="ti"><b>Organization policies triggered false role errors.</b><p>Our security team's SCPs used conditions, and the SDK's client-side role validation rejected roles that actually worked.</p><p class="fix"><span>Fix</span>Worked through it with the platform team and documented the known false positive. Budget a day for IAM in any locked-down account.</p></div>
+          <div class="ti"><b>SageMaker costs about 25% more per GPU-hour than EC2.</b><p>For per-job training that premium was worth it: no idle machines and no cluster to run. For always-on research boxes it wasn't.</p><p class="fix"><span>Fix</span>Training on SageMaker jobs; dev boxes on EC2 with auto-stop after 1 hour idle.</p></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Bedrock</h3>
+        <p class="scope">We used Bedrock for the frontier model throughout and evaluated Custom Model Import (CMI) for serving our fine-tuned 4B model.</p>
+        <div class="items">
+          <div class="ti"><b>Imported models go cold.</b><p>After an idle period, CMI evicts the model and calls return <code>ModelNotReadyException</code>. Restore time ranged from about a minute to tens of minutes, with no way to guarantee it.</p><p class="fix"><span>Fix</span>Keep-warm calls every few minutes plus a long retry budget work for batch jobs. For the live search path we moved to a SageMaker endpoint.</p></div>
+          <div class="ti"><b>Always-warm CMI cost more than an instance.</b><p>CMI bills per active model copy in 5-minute windows. Keeping one copy warm around the clock priced out at roughly 3x a g6e.xlarge.</p><p class="fix"><span>Fix</span>CMI only makes sense for traffic with real idle periods, such as nightly enrichment jobs.</p></div>
+          <div class="ti"><b>No adapter import.</b><p>We found no way to import a LoRA adapter on its own. Every retrain meant merging the adapter into the base weights and re-importing the full model.</p><p class="fix"><span>Fix</span>Merge as a pipeline step, version the merged weights in S3, and account for 5–20 minutes of import time per release.</p></div>
+          <div class="ti"><b>Converse didn't support our imported architecture.</b><p>We had to render the chat template ourselves and call <code>InvokeModel</code> with a raw prompt. That created a second place where the prompt format could drift from training.</p><p class="fix"><span>Fix</span>One shared prompt-building library used by training data generation, evaluation and every serving path.</p></div>
+          <div class="ti"><b>Pinning the frontier model.</b><p>The same Converse calls served four jobs: baseline, data generation, judging and fallback. A silent model version change would have shifted all four.</p><p class="fix"><span>Fix</span>Pin exact model IDs in config, use temperature 0 for judging, and use a judge from a different model family than the teacher that generated the data.</p></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Serving the LLM</h3>
+        <div class="items">
+          <div class="ti"><b>Cold starts took minutes.</b><p>Our first 8B endpoint took about 9 minutes from scale-out to first request. SageMaker container caching roughly halved it. On the EKS prototype, model streaming plus a persistent compile cache took it from about 5 minutes to under 3.</p><p class="fix"><span>Fix</span>Never scale to zero. Keep a floor of one warm instance and scale out early on queue depth.</p></div>
+          <div class="ti"><b>The concurrency cliff.</b><p>On a 24 GB GPU, latency was fine up to about 16–32 concurrent sessions and then collapsed, with timeouts not far beyond. Two 8B candidates behaved very differently under the same load.</p><p class="fix"><span>Fix</span>Moved to L40S 48 GB and set the autoscaling target below the cliff measured in our own load test. Include load behavior in model selection.</p></div>
+          <div class="ti"><b>Multi-LoRA had a cost.</b><p>Serving adapters on a shared base added latency, and vLLM reserves GPU memory for every <code>--max-loras</code> slot whether or not it's used.</p><p class="fix"><span>Fix</span>Production serves one merged model. Multi-LoRA is only for side-by-side experiments, with one standard rank for every adapter.</p></div>
+          <div class="ti"><b>FP8 reduced accuracy on rare values.</b><p>Quantizing to FP8 cut latency but reduced accuracy on rare amenity codes and small regional place names.</p><p class="fix"><span>Fix</span>Shipped BF16. Re-test quantization on per-slice metrics for every new model, not just the overall score.</p></div>
+          <div class="ti"><b>EKS prototype gotchas.</b><p>The default 64 MiB <code>/dev/shm</code> crashed vLLM. The liveness probe killed pods while weights were still loading. The load balancer's 60-second idle timeout cut off streamed responses. CPU-based autoscaling meant nothing for GPU load.</p><p class="fix"><span>Fix</span>8 GiB memory-backed <code>/dev/shm</code>, a startup probe, a 300-second idle timeout, and autoscaling on <code>vllm:num_requests_waiting</code>.</p></div>
+          <div class="ti"><b>vLLM upgrades move performance.</b><p>A minor version upgrade changed throughput noticeably. LoRA-related crash bugs appeared in several 2026 releases of both vLLM and SGLang.</p><p class="fix"><span>Fix</span>Pin the engine version in the container image. Upgrade only after a load test and the full eval set.</p></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Interfaces and formats</h3>
+        <div class="items">
+          <div class="ti"><b>Chat template drift.</b><p>Training used the tokenizer's chat template; an early serving path built the prompt by hand. Quality dropped with no error anywhere.</p><p class="fix"><span>Fix</span>Always use the tokenizer's template, through the shared prompt library, and run a canary request with a known answer at deploy time.</p></div>
+          <div class="ti"><b>Keep the output schema simple.</b><p>Constrained decoding with a flat JSON schema added little latency. An early, deeply nested schema with many optional fields was slow and error-prone.</p><p class="fix"><span>Fix</span>Flat schema, enums for amenity and property-type codes, ISO dates, and validation on every response with fallback to keyword search.</p></div>
+          <div class="ti"><b>One client for two API shapes.</b><p>vLLM and SageMaker endpoints speak an OpenAI-compatible API; Bedrock Converse uses a different request and response shape.</p><p class="fix"><span>Fix</span>A thin adapter layer so the app can switch between fine-tuned and frontier models with a config change. This made the A/B tests and the fallback routing simple.</p></div>
+          <div class="ti"><b>Timeouts must agree end to end.</b><p>The client, load balancer and endpoint each had different timeouts, so some requests were abandoned by one layer while another kept generating.</p><p class="fix"><span>Fix</span>One timeout budget (1 second for search calls), enforced at the client, with matching settings below it.</p></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Models and training recipes</h3>
+        <div class="items">
+          <div class="ti"><b>In-batch false negatives.</b><p>Many help articles answer the same question, so contrastive training punished the model for retrieving correct alternatives.</p><p class="fix"><span>Fix</span>A no-duplicates batch sampler, and mined negatives filtered: skip the top 10 ranks and drop anything scoring above 95% of the positive.</p></div>
+          <div class="ti"><b>Train at serving length.</b><p>Our first embedding run used a 512-token limit while serving embedded longer policy pages. It barely helped on those pages.</p><p class="fix"><span>Fix</span>Match the training max length to the serving chunk size. Larger chunks also retrieved better for policy pages.</p></div>
+          <div class="ti"><b>Small rerankers didn't fine-tune well.</b><p>A 0.6B reranker got worse after fine-tuning. A larger model distilled from LLM scores improved steadily.</p><p class="fix"><span>Fix</span>Distillation from an LLM teacher rather than plain labels, on a reranker of at least base size.</p></div>
+          <div class="ti"><b>LoRA rank and forgetting.</b><p>Rank 16–32 was enough; 64 added nothing. General ability dropped sharply after fine-tuning, which was acceptable only because the model does one narrow job.</p><p class="fix"><span>Fix</span>Keep the model's job narrow. If it ever has to chat, mix general instruction data back in.</p></div>
+          <div class="ti"><b>The best checkpoint came early.</b><p>Later checkpoints often scored lower on the eval set while the LLM judge scored them higher.</p><p class="fix"><span>Fix</span>Evaluate every checkpoint on task metrics and pick by those, with the judge as a secondary signal.</p></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Embeddings and the vector index</h3>
+        <div class="items">
+          <div class="ti"><b>Vector fields can't be changed in place.</b><p>In OpenSearch, a <code>knn_vector</code> field's dimension, engine and distance metric are fixed when the index is created.</p><p class="fix"><span>Fix</span>One index per model version, background backfill, an eval gate, then an alias swap. Plan for 2x storage during overlap.</p></div>
+          <div class="ti"><b>Bulk re-embedding through the live endpoint was slow.</b><p>The online embedding server is built for requests, not millions of documents.</p><p class="fix"><span>Fix</span>A separate batch job on a GPU instance. Tokenization on the CPU became the bottleneck, so we added CPU workers and grouped texts by length.</p></div>
+          <div class="ti"><b>Silent CPU fallback.</b><p>One ONNX build couldn't find the CUDA provider and quietly ran on CPU, about 100x slower, with no error.</p><p class="fix"><span>Fix</span>Assert the execution provider at startup and fail fast if the GPU isn't in use.</p></div>
+          <div class="ti"><b>Newer embedders didn't win on multilingual tickets.</b><p>A newer, smaller embedding model scored below the older multilingual model on our ticket set before any fine-tuning.</p><p class="fix"><span>Fix</span>Model selection on our own eval set, across every language with real traffic.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="takeaways">
+    <span class="eyebrow">Across both projects</span>
+    <h2>What we'd tell the next team</h2>
+    <div class="takeaways">
+      <div class="takeaway"><div><b>Build the evaluation set before the model.</b><p>It was the most valuable asset in both projects.</p></div></div>
+      <div class="takeaway"><div><b>Beat the simple baseline first.</b><p>Hybrid search plus a reranker, or a prompted frontier model, got us part of the way with little effort. Fine-tuning had to earn its place against them.</p></div></div>
+      <div class="takeaway"><div><b>Small models with one narrow task worked best.</b><p>Both successful models were small and did one job.</p></div></div>
+      <div class="takeaway"><div><b>Compute was not the bottleneck.</b><p>Data cleaning, evaluation and rollout took about 80% of the effort. GPU availability was a bigger constraint than price.</p></div></div>
+      <div class="takeaway"><div><b>Design operations from the start.</b><p>Reindexing, retraining, version pinning, warm replicas and seasonal peaks were all things we wished we had designed at the start.</p></div></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="foot-in">
+    <img src="https://cdn.jsdelivr.net/gh/am-consultingai/am-assets@v2/logo/am-logo-white-600.png" alt="AM Consulting" width="111" height="30">
+    <div class="flinks">
+      <a href="https://www.amconsultingai.com">amconsultingai.com</a>
+      <a href="mailto:office@amconsultingai.com">office@amconsultingai.com</a>
+      <a href="https://www.linkedin.com/in/avishay-meron/">LinkedIn</a>
+    </div>
+    <span>The model is rarely the hard part — the system around it is.</span>
+  </div>
+</footer>
+
+<script>
+// Highlight the nav link for the section currently in view.
+(() => {
+  const links = [...document.querySelectorAll('.nav-links a')];
+  const byId = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const sections = [...byId.keys()].map(id => document.getElementById(id)).filter(Boolean);
+  const setActive = id => links.forEach(a => {
+    const on = a === byId.get(id);
+    a.classList.toggle('on', on);
+    if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+    if (on && a.parentElement.scrollWidth > a.parentElement.clientWidth) a.scrollIntoView({block: 'nearest', inline: 'center'});
+  });
+  const update = () => {
+    const navH = document.querySelector('.nav').offsetHeight + 40;
+    let current = null;
+    for (const s of sections) if (s.getBoundingClientRect().top <= navH) current = s.id;
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) current = sections.at(-1).id;
+    setActive(current);
+  };
+  addEventListener('scroll', update, {passive: true});
+  addEventListener('resize', update);
+  update();
+})();
+</script>
+</body>
+</html>
